@@ -1,2 +1,2 @@
-# AI-agents-and-Harnesses-foundations
-AI agents and Harnesses foundations, published by Packt
+# AI-Agents-and-Harnesses-Foundations
+AI Agents and Harnesses Foundations, published by Packt

@@ -75,11 +75,11 @@ We start here — this is how you'd normally build an agent. Reading through the
 
 - **Imports & config** — LangChain, LangSmith, model name
 - **Tools** — two plain Python functions decorated with `@tool`. LangChain auto-generates the JSON schema from the function signature and docstring. No manual schema writing needed.
-- **Agent loop** — initialize the LLM with `init_chat_model(f"ollama:{MODEL}")`, attach tools with `bind_tools()`, then loop: invoke the LLM, check if it returned tool calls, execute the tool, append a `ToolMessage`, repeat.
+- **Agent loop** — initialize the LLM with `init_chat_model("ollama:qwen3.8:27b")`, attach tools with `bind_tools()`, then loop: invoke the LLM, check if it returned tool calls, execute the tool, append a `ToolMessage`, repeat.
 
 **What LangChain gives you:**
 - `@tool` → auto-generates JSON tool schema from your function
-- `init_chat_model()` → swap providers by changing one string (`"ollama:qwen3"` → `"openai:gpt-4o"`)
+- `init_chat_model()` → swap providers by changing one string (`"ollama:qwen3.8:27b"` → `"openai:gpt-5.6-sol"`)
 - `bind_tools()` → attaches tool definitions to the LLM
 - `ToolMessage` → handles the tool result format
 - Typed message objects (`SystemMessage`, `HumanMessage`) instead of raw dicts
@@ -159,7 +159,8 @@ The discount tiers use non-obvious percentages (bronze: 5%, silver: 12%, gold: 2
 ## Quick Start
 
 ```bash
-git checkout project/agents-under-the-hood
+cd project-agents-under-the-hood
+cp .env.example .env   # then fill in your keys
 uv sync
 ```
 
@@ -172,5 +173,7 @@ uv run python 3_raw_react_prompt.py
 
 ## Prerequisites
 
-- **Ollama** running locally with the `qwen3:1.7b` model pulled (`ollama pull qwen3:1.7b`)
-- **LangSmith API key** in `.env` (optional, for tracing)
+- **Ollama** running locally with the `qwen3.8:27b` model pulled (`ollama pull qwen3.8:27b`, then `ollama serve`)
+- **LangSmith API key** in `.env` for tracing (`LANGSMITH_PROJECT=ReAct-under-the-hood`, see `.env.example`)
+- **OpenAI API key** in `.env` if you switch the model to `openai:gpt-5.6-sol`
+- Pinned to `langchain==1.3.8` (exact versions are in `uv.lock`)

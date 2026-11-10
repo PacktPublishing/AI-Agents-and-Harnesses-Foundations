@@ -1,4 +1,5 @@
-# CHANGE 1: Add re + inspect — we'll parse tool calls from raw text instead of structured JSON.
+# CHANGE 1: Add re + inspect — we'll parse tool calls from
+# raw text instead of structured JSON.
 import re
 import inspect
 from dotenv import load_dotenv
@@ -9,10 +10,7 @@ import ollama
 from langsmith import traceable
 
 MAX_ITERATIONS = 10
-MODEL = "qwen3:1.7b"
-
-
-# --- Tools (LangChain @tool decorator) ---
+MODEL = "qwen3.8:27b"
 
 
 @traceable(run_type="tool")
@@ -38,13 +36,15 @@ tools = {
     "apply_discount": apply_discount,
 }
 
-# CHANGE 3: Delete the JSON schemas. Tools now live inside the prompt as plain text.
+# CHANGE 3: Delete the JSON schemas. Tools now live inside the prompt as
+# plain text.
 # We derive descriptions from the functions themselves using inspect.
 
 def get_tool_descriptions(tools_dict):
     descriptions = []
     for tool_name, tool_function in tools_dict.items():
-        # __wrapped__ bypasses decorator wrappers (e.g., @traceable adds *, config=None)
+        # __wrapped__ bypasses decorator wrappers
+        # (e.g., @traceable adds *, config=None)
         original_function = getattr(tool_function, "__wrapped__", tool_function)
         signature = inspect.signature(original_function)
         docstring = inspect.getdoc(tool_function) or ""
@@ -53,6 +53,22 @@ def get_tool_descriptions(tools_dict):
 
 tool_descriptions = get_tool_descriptions(tools)
 tool_names = ", ".join(tools.keys())
+
+# NOTE: Ollama can also auto-generate these schemas if you pass the
+# functions directly as tools (similar to LangChain's tool decorator):
+#   tools_for_llm = [get_product_price, apply_discount]
+# However, this requires your docstrings to follow the Google docstring
+# format so Ollama can parse parameter descriptions from the Args section.
+# For example:
+#   def get_product_price(product: str) -> float:
+#       """Look up the price of a product in the catalog.
+#
+#       Args:
+#           product: The product name, e.g. 'laptop', 'headphones', 'keyboard'.
+#
+#       Returns:
+#           The price of the product, or 0 if not found.
+#       """
 
 react_prompt = f"""
 STRICT RULES — you must follow these exactly:
@@ -82,10 +98,8 @@ Question: {{question}}
 Thought:"""
 
 
-
-
-# CHANGE 4: Drop tools= from ollama.chat(). The LLM has no idea it's an agent —
-# all agency comes from the prompt above and our regex parsing below.
+# CHANGE 4: Drop tools= from ollama.chat(). The LLM has no idea it's an
+# agent — all agency comes from the prompt above and our regex parsing below.
 
 @traceable(name="Ollama Chat", run_type="llm")
 def ollama_chat_traced(model, messages, options):
@@ -93,20 +107,14 @@ def ollama_chat_traced(model, messages, options):
 
 
 
-
-
-# --- Agent Loop ---
-
-
 @traceable(name="Ollama Agent Loop")
 def run_agent(question: str):
     print(f"Question: {question}")
     print("=" * 60)
 
-
     # CHANGE 5: One prompt string replaces the system/user message split.
     prompt = react_prompt.format(question=question)
-    scratchpad = "" 
+    scratchpad = ""
 
     for iteration in range(1, MAX_ITERATIONS + 1):
         print(f"\n--- Iteration {iteration} ---")
@@ -131,26 +139,21 @@ def run_agent(question: str):
             print(f"Final Answer: {final_answer}")
             return final_answer
 
-
-
-        # CHANGE 6: Parse tool calls from raw text with regex — fragile if LLM doesn't follow format.
-        print(f"  [Parsing] Looking for Action and Action Input in LLM output...")
-
-        action_match = re.search(r"Action:\s*(.+)", output)
-        action_input_match = re.search(r"Action Input:\s*(.+)", output)
-
+        # Use regular expressions to extract action and action input from the LLM output
+        print(f"  [Parsing] Looking for action and action input in LLM output...")
+        action_match = re.search(r"Action: (.*)", output)
+        action_input_match = re.search(r"Action Input: (.*)", output)
         if not action_match or not action_input_match:
-            print(
-                "  [Parsing] ERROR: Could not parse Action/Action Input from LLM output"
-            )
-            break
+            raise ValueError("Could not parse both action and action input from LLM output.")
 
-        tool_name = action_match.group(1).strip()
-        tool_input_raw = action_input_match.group(1).strip()
+        tool_name = action_match.group(1)
+        # The book names this tool_input_run on p.147 and tool_input_raw on p.148.
+        tool_input_raw = action_input_match.group(1)
 
         print(f"  [Tool Selected] {tool_name} with args: {tool_input_raw}")
 
-        # Split comma-separated args; strip key= prefix if LLM outputs key=value format
+        # Split comma-separated args; strip key= prefix if LLM outputs
+        # key=value format
         raw_args = [x.strip() for x in tool_input_raw.split(",")]
         args = [x.split("=", 1)[-1].strip().strip("'\"") for x in raw_args]
 
@@ -158,20 +161,19 @@ def run_agent(question: str):
         if tool_name not in tools:
             observation = f"Error: Tool '{tool_name}' not found. Available tools: {list(tools.keys())}"
         else:
-            observation = str(tools[tool_name](*args))
-
+            tool_fn = tools[tool_name]
+            result = tool_fn(*args)
+            observation = str(result)
 
         print(f"  [Tool Result] {observation}")
 
-        # CHANGE 7: History is one growing string re-sent every iteration (replaces messages.append).
+        # CHANGE 7: History is one growing string re-sent every iteration
+        # (replaces messages.append).
         scratchpad += f"{output}\nObservation: {observation}\nThought:"
-
 
     print("ERROR: Max iterations reached without a final answer")
     return None
 
 
 if __name__ == "__main__":
-    print("Hello LangChain Agent (.bind_tools)!")
-    print()
     result = run_agent("What is the price of a laptop after applying a gold discount?")
